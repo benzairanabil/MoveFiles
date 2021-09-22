@@ -1,5 +1,7 @@
-﻿using System;
+﻿using NLog;
+using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -11,6 +13,7 @@ namespace MoveFiles
 {
     class Utils
     {
+        private static Logger logger = LogManager.GetCurrentClassLogger();
         public static bool CheckLot(string nameFile, string path)
         {
             var lines = File.ReadAllLines(path);
@@ -42,22 +45,11 @@ namespace MoveFiles
             {
                 Console.WriteLine("Path archive introuvable");
             }
-            using (StreamWriter sw = File.AppendText(currentPath))
-            {
-                sw.WriteLine(" Nombre fichier zip trouvé :"+files.Length);
-                sw.Dispose();
-                sw.Close();
-            }
+
             foreach (var file in files)
             {
                     string name = Path.GetFileName(file);
-                using (StreamWriter sw = File.AppendText(currentPath))
-                {
-                    sw.WriteLine("file name"+name);
-                    sw.WriteLine("time modified : " + File.GetLastWriteTime(file));
-                    sw.Dispose();
-                    sw.Close();
-                }
+
                 if (!File.Exists(Path.Combine(archive,name)) && ((dateNow - File.GetLastWriteTime(file)).TotalMinutes >= -58 || (dateNow - File.GetLastWriteTime(file)).TotalMinutes >= 2))
                 {
                   
@@ -97,37 +89,46 @@ namespace MoveFiles
 
             }
         }
-        public static void copyAndMoveFiles(string source , string destination , string archive)
+        public static void copyAndMoveFiles(string source , string destination , string archive , string archiveDouble)
         {
             string[] files = Directory.GetFiles(source,"*.zip");
+            int time_out =Convert.ToInt32(ConfigurationManager.AppSettings["time_out"]);
             DateTime dateNow = DateTime.Now;
             if (!Directory.Exists(destination))
             {
                 Console.WriteLine("Path destination introuvable");
+                logger.Info("Path destination introuvable");
             }
             foreach (var file in files)
             {
-
+                
                 string name = Path.GetFileName(file);
-
-                if ((dateNow.AddHours(1) - File.GetLastWriteTime(file)).TotalMinutes >= 2 || (dateNow - File.GetLastWriteTime(file)).TotalMinutes >= 2)
+                FileInfo info = new FileInfo(file);
+                if ( (dateNow - File.GetLastWriteTime(file)).TotalMinutes >= 2 && info.Length > 0)
                 {
                     try
-                    {
-                        File.Copy(file, file.Replace(source, destination), true);
-                        Console.WriteLine("File Copy From Source To Destination : " + name);
-                        File.Move(file, file.Replace(source, archive));
-                        Console.WriteLine("File Moved From Source To Archive : " + name);
-                    }
-                    catch
-                    {
-                        Console.WriteLine("Erreur Copy in file : " + name);
-                        using (StreamWriter sw = File.AppendText(pathLot))
+                    {  if(!File.Exists(Path.Combine(archive, name)))
                         {
-                            sw.WriteLine("!!!!!!! Erreur Copy in file : " + name +" ["+dateNow.ToString()+"]");
-                            sw.Dispose();
-                            sw.Close();
+                            File.Copy(file, file.Replace(source, archive), false);
+                            Console.WriteLine("File Copy From Source To Archive : " + name);
+                            logger.Info("File Copy From Source To Archive : " + name);
                         }
+                        else
+                        {
+                            File.Copy(file, file.Replace(source, archiveDouble), true);
+                            Console.WriteLine("File Copy From Source To Folder Double : " + name);
+                            logger.Info("File is already exist in archive  : " + name);
+                            logger.Info("File Copy From Source To Folder Double : " + name);
+                        }
+                        File.Move(file, file.Replace(source, destination));
+                        Console.WriteLine("File Moved From Source To Destination : " + name);
+                        logger.Info("File Moved From Source To Destination : " + name);
+                    }
+                    catch(Exception ex)
+                    {
+                       
+                        Console.WriteLine("Erreur Move in file : " + name);
+                        logger.Error("Erreur Move in file : "+ ex.Message +" => "+ name);     
                     }
                     
                 }
